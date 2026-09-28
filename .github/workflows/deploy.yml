@@ -8,10 +8,8 @@ on:
   workflow_dispatch:
 
 env:
-  # TODO: troque pelo seu slug, o começo do seu e-mail com ponto virando hífen.
-  SLUG: SEU-SLUG
-  # TODO: a primeira porta da sua faixa. Veja em `gr-docker ajuda`.
-  PORTA: 230N0
+  SLUG: gabriel-sousa
+  PORTA: 23070
 
 jobs:
   deploy:
@@ -28,24 +26,59 @@ jobs:
 
       - name: Derrubar a topologia antiga
         run: |
-          # TODO: apague os três containers, se existirem.
-          # Dica: o passo não pode falhar quando eles ainda não existem.
-          echo "TODO"
+          gr() { ssh -i ~/.ssh/deploy "gr-${SLUG}@gr.lab.ayty.org" gr-docker "$@"; }
+
+          gr rm -f front || true
+          gr rm -f api || true
+          gr rm -f banco || true
 
       - name: Criar rede e volume
         run: |
-          # TODO: as duas redes e o volume. A rede do banco é interna.
-          # Dica: criar o que já existe devolve erro. Trate isso.
-          echo "TODO"
+          gr() { ssh -i ~/.ssh/deploy "gr-${SLUG}@gr.lab.ayty.org" gr-docker "$@"; }
+
+          gr network create web || true
+          gr network create dados --interna || true
+          gr volume create pgdata || true
 
       - name: Subir banco, API e front
         run: |
-          # TODO: os três containers, na ordem certa.
-          # O front precisa receber o commit que o deploy publicou:
-          #   -e DEPLOY_SHA=${{ github.sha }}
-          echo "TODO"
+          gr() { ssh -i ~/.ssh/deploy "gr-${SLUG}@gr.lab.ayty.org" gr-docker "$@"; }
+
+          gr run -d --name banco \
+            --network dados \
+            -v pgdata:/var/lib/postgresql/data \
+            -e POSTGRES_PASSWORD="${{ secrets.DB_SENHA }}" \
+            -e POSTGRES_DB=pokedex \
+            postgres:17-alpine
+
+          gr run -d --name api \
+            --network dados \
+            -e POSTGRES_HOST="gr-${SLUG}-banco" \
+            -e POSTGRES_DB=pokedex \
+            -e POSTGRES_PASSWORD="${{ secrets.DB_SENHA }}" \
+            gr-atv2-api:1
+
+          gr network connect web api
+
+          gr run -d --name front \
+            --network web \
+            -p "${PORTA}:80" \
+            -e API="gr-${SLUG}-api" \
+            -e DEPLOY_SHA="${{ github.sha }}" \
+            gr-atv2-front:1
 
       - name: Conferir que subiu
         run: |
-          # TODO: pergunte ao servidor se a listagem responde.
-          echo "TODO"
+          URL="http://gr.lab.ayty.org:${PORTA}/api/pokemons"
+
+          for i in $(seq 1 30); do
+            if curl -sf "$URL" > /dev/null; then
+              echo "Listagem respondeu em $URL"
+              exit 0
+            fi
+            echo "Tentativa $i: ainda sem resposta, aguardando..."
+            sleep 2
+          done
+
+          echo "Listagem não respondeu a tempo"
+          exit 1
