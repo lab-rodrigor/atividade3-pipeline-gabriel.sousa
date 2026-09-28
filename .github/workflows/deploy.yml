@@ -28,9 +28,12 @@ jobs:
         run: |
           gr() { ssh -i ~/.ssh/deploy "gr-${SLUG}@gr.lab.ayty.org" gr-docker "$@"; }
 
-          gr rm -f front || true
-          gr rm -f api || true
-          gr rm -f banco || true
+          gr stop front || true
+          gr rm front || true
+          gr stop api || true
+          gr rm api || true
+          gr stop banco || true
+          gr rm banco || true
 
       - name: Criar rede e volume
         run: |
